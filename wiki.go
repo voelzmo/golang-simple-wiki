@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"io/ioutil"
 	"net/http"
@@ -8,8 +9,9 @@ import (
 )
 
 type Page struct {
-	Title string
-	Body  []byte
+	Title    string
+	Body     []byte
+	HTMLBody template.HTML
 }
 
 const (
@@ -19,6 +21,7 @@ const (
 
 var templates = template.Must(template.ParseFiles(TEMPLATE_DIRECTORY+"/edit.html", TEMPLATE_DIRECTORY+"/view.html"))
 var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
+var linkRegex = regexp.MustCompile(`\[([a-zA-z]+?)\]`)
 
 func (p *Page) save() error {
 	filename := p.Title + ".txt"
@@ -35,6 +38,7 @@ func loadPage(title string) (*Page, error) {
 }
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
+	p.HTMLBody = template.HTML(replaceLink(p.Body))
 	err := templates.ExecuteTemplate(w, tmpl+".html", p)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -82,6 +86,15 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/view/FrontPage", http.StatusFound)
+}
+
+func replaceLink(body []byte) string {
+	linkText := linkRegex.ReplaceAllFunc(body, func(match []byte) []byte {
+		linkName := match[1 : len(match)-1]
+		str := fmt.Sprintf("<a href=\"/view/%s\">[%s]</a>", linkName, linkName)
+		return []byte(str)
+	})
+	return string(linkText)
 }
 
 func main() {
